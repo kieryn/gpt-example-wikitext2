@@ -149,8 +149,10 @@ def train(config_path):
             avg_val_loss = (val_loss / val_count) if val_count > 0 else float('nan')
             print(f"Validation loss: {avg_val_loss:.4f}")
 
-        # Save checkpoint
-        checkpoints.save_checkpoint(ckpt_dir="logs", target=state.params, step=epoch, overwrite=True)
+        # Save checkpoint (use absolute path)
+        ckpt_dir = os.path.abspath(config.get("checkpoint_dir", "logs"))
+        os.makedirs(ckpt_dir, exist_ok=True)
+        checkpoints.save_checkpoint(ckpt_dir=ckpt_dir, target=state.params, step=epoch, overwrite=True)
     print("Training complete.")
 
 if __name__ == "__main__":
