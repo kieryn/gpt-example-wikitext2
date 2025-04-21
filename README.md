@@ -22,7 +22,10 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
   **Note for WSL2 GPU users**: Ensure you have both the NVIDIA CUDA toolkit and cuDNN libraries installed inside WSL2. For example:
   ```bash
   sudo apt update
-  sudo apt install -y nvidia-cuda-toolkit libcudnn8 libcudnn8-dev
+  # Install CUDA toolkit (version may vary, e.g. 12.8) from the local CUDA repo
+  sudo apt update
+  sudo apt install -y cuda-12-8
+  # (Optional) If you require cuDNN for other libraries, install via NVIDIA's cuDNN packages
   ```
   Then add the driver library path to the loader:
   ```bash
