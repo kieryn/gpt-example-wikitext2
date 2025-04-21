@@ -97,6 +97,9 @@ def train(config_path):
         config = yaml.safe_load(f)
 
     tokenizer = load_tokenizer(config.get("tokenizer_path", "tokenizer"))
+    # Optional smoke-test settings
+    max_steps = config.get("max_steps_per_epoch", None)
+    skip_validation = config.get("skip_validation", False)
 
     # Prepare data pipeline: load raw text, tokenize, and batch into fixed-length sequences
     lm_datasets = prepare_datasets(tokenizer, config)
@@ -113,31 +116,38 @@ def train(config_path):
     # Training loop
     dropout_rng = jax.random.PRNGKey(config.get("seed", 1))
     batch_size = config["batch_size"]
-    steps_per_epoch = len(train_ds["input_ids"]) // batch_size
+    total_steps = len(train_ds["input_ids"]) // batch_size
     num_epochs = config.get("num_epochs", 1)
+    log_every = config.get("log_every", 100)
     for epoch in range(1, num_epochs + 1):
         epoch_loss = 0.0
         t0 = time.time()
-        for step in range(steps_per_epoch):
+        step_count = 0
+        for step in range(total_steps):
+            if max_steps is not None and step_count >= max_steps:
+                break
             batch = next(train_loader)
             dropout_rng, subkey = jax.random.split(dropout_rng)
             state, loss = train_step(state, batch, subkey)
             epoch_loss += loss
-            if (step + 1) % config.get("log_every", 100) == 0 or (step + 1) == steps_per_epoch:
-                print(f"Epoch {epoch} step {step+1}/{steps_per_epoch} loss {loss:.4f}")
-        epoch_loss /= steps_per_epoch
+            step_count += 1
+            if step_count % log_every == 0 or (max_steps is not None and step_count == max_steps):
+                print(f"Epoch {epoch} step {step_count}/{total_steps} loss {loss:.4f}")
+        avg_loss = (epoch_loss / step_count) if step_count > 0 else float('nan')
         t1 = time.time()
-        print(f"Epoch {epoch} completed in {t1 - t0:.2f}s, avg loss {epoch_loss:.4f}")
+        print(f"Epoch {epoch} completed in {t1 - t0:.2f}s, steps {step_count}, avg loss {avg_loss:.4f}")
 
         # Validation
-        if val_ds is not None:
+        if (not skip_validation) and val_ds is not None:
             val_loss = 0.0
             val_steps = len(val_ds["input_ids"]) // batch_size
+            val_count = 0
             for _ in range(val_steps):
                 batch = next(val_loader)
                 val_loss += eval_step(state, batch)
-            val_loss /= val_steps
-            print(f"Validation loss: {val_loss:.4f}")
+                val_count += 1
+            avg_val_loss = (val_loss / val_count) if val_count > 0 else float('nan')
+            print(f"Validation loss: {avg_val_loss:.4f}")
 
         # Save checkpoint
         checkpoints.save_checkpoint(ckpt_dir="logs", target=state.params, step=epoch, overwrite=True)
