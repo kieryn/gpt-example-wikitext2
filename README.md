@@ -45,5 +45,18 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
 └── src/                    # Source code
     ├── tokenizer.py
     ├── model.py
-    └── train.py
+    ├── train.py
+    └── generate.py          # Interactive text generation
 ```
+
+## Generation
+
+After training, you can generate text interactively:
+
+```bash
+source .venv/bin/activate
+# (optional) force CPU for generation
+JAX_PLATFORM_NAME=cpu python src/generate.py --config configs/config.yaml --length 20
+```
+
+At the prompt, enter a starting text (empty input to exit) and the model will produce the next tokens.
