@@ -20,12 +20,33 @@ from flax.training import checkpoints
 from model import TransformerDecoder
 from tokenizer import load_tokenizer
 
-def generate_text(params, tokenizer, config, prompt, length=20):
+def top_k_top_p_filter(logits, top_k=0, top_p=1.0):
+    """Filter logits with top-k and/or nucleus (top-p) filtering."""
+    # logits: 1D numpy array
+    if top_k > 0:
+        # Remove all tokens not in top-k
+        indices_to_remove = logits < np.partition(logits, -top_k)[-top_k]
+        logits[indices_to_remove] = -np.inf
+    if top_p < 1.0:
+        sorted_indices = np.argsort(-logits)
+        sorted_logits = logits[sorted_indices]
+        exp_logits = np.exp(sorted_logits - np.max(sorted_logits))
+        probs = exp_logits / np.sum(exp_logits)
+        cumulative_probs = np.cumsum(probs)
+        # Remove tokens with cumulative probability above threshold
+        sorted_indices_to_remove = cumulative_probs > top_p
+        sorted_indices_to_remove[0] = False
+        remove_indices = sorted_indices[sorted_indices_to_remove]
+        logits[remove_indices] = -np.inf
+    return logits
+
+def generate_text(params, tokenizer, config, prompt, length=20,
+                  temperature=1.0, top_k=0, top_p=1.0):
     """
     Autoregressively generate `length` tokens given a text prompt.
-    Uses greedy sampling (argmax).
+    Supports temperature, top-k, and top-p sampling.
     """
-    # Tokenize the prompt
+    # Tokenize prompt
     encoding = tokenizer.encode(prompt)
     seq = encoding.ids.copy()
     max_len = config["max_seq_length"]
@@ -38,17 +59,23 @@ def generate_text(params, tokenizer, config, prompt, length=20):
         max_seq_length=max_len,
         dropout_rate=config.get("dropout_rate", 0.1)
     )
-    # Generate tokens
     for _ in range(length):
-        # Prepare input (truncate to last max_len tokens)
         context = seq[-max_len:]
         input_arr = np.array([context], dtype=np.int32)
-        # Get logits for next token
         logits = model.apply({'params': params}, input_arr, train=False)
-        logits = np.array(logits[0, -1])  # (vocab_size,)
-        next_id = int(np.argmax(logits))
+        # Get logits for last position and convert to numpy
+        logits = np.array(logits[0, -1], dtype=np.float64)
+        # Apply temperature
+        if temperature != 1.0:
+            logits = logits / temperature
+        # Apply top-k and top-p filtering
+        logits = top_k_top_p_filter(logits, top_k, top_p)
+        # Convert to probabilities
+        exp_logits = np.exp(logits - np.max(logits))
+        probs = exp_logits / exp_logits.sum()
+        # Sample next token id
+        next_id = int(np.random.choice(len(probs), p=probs))
         seq.append(next_id)
-    # Decode full sequence
     return tokenizer.decode(seq)
 
 def main():
@@ -60,6 +87,12 @@ def main():
                         help="Directory where checkpoints are saved.")
     parser.add_argument("--length", type=int, default=20,
                         help="Number of tokens to generate.")
+    parser.add_argument("--temperature", type=float, default=1.0,
+                        help="Sampling temperature (1.0 = greedy).")
+    parser.add_argument("--top_k", type=int, default=0,
+                        help="Top-k sampling (0 = disabled).")
+    parser.add_argument("--top_p", type=float, default=1.0,
+                        help="Nucleus (top-p) sampling (1.0 = disabled).")
     parser.add_argument("--no_gpu", action="store_true",
                         help="Force CPU for generation.")
     args = parser.parse_args()
@@ -103,7 +136,16 @@ def main():
             break
         if not prompt.strip():
             break
-        output = generate_text(params, tokenizer, config, prompt, length=args.length)
+        output = generate_text(
+            params,
+            tokenizer,
+            config,
+            prompt,
+            length=args.length,
+            temperature=args.temperature,
+            top_k=args.top_k,
+            top_p=args.top_p,
+        )
         print(output)
 
 if __name__ == "__main__":
