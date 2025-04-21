@@ -25,7 +25,14 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
   # Install CUDA toolkit (version may vary, e.g. 12.8) from the local CUDA repo
   sudo apt update
   sudo apt install -y cuda-12-8
-  # (Optional) If you require cuDNN for other libraries, install via NVIDIA's cuDNN packages
+  # (Optional) To enable deeper GPU support, install cuDNN for your CUDA version:
+  # 1. Visit https://developer.nvidia.com/rdp/cudnn-download and download the cuDNN Debian package matching your CUDA version and OS.
+  # 2. Install the local repository package, e.g.:
+  #    wget https://developer.download.nvidia.com/compute/cudnn/<version>/local_installers/cudnn-local-repo-*-deb
+  #    sudo dpkg -i cudnn-local-repo-*.deb
+  #    sudo cp /var/cudnn-local-repo-*/cudnn-local.keyring /usr/share/keyrings/
+  #    sudo apt update
+  #    sudo apt install libcudnn8 libcudnn8-dev
   ```
   Then add the driver library path to the loader:
   ```bash
