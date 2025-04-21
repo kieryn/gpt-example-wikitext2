@@ -19,8 +19,9 @@ def train_tokenizer(data_path="data", vocab_size=32000, min_frequency=2, special
     return tokenizer
 
 def load_tokenizer(tokenizer_path="tokenizer"):
+    # Initialize tokenizer from trained vocabulary and merges
     tokenizer = ByteLevelBPETokenizer(
-        vocab_file=os.path.join(tokenizer_path, "vocab.json"),
-        merges_file=os.path.join(tokenizer_path, "merges.txt")
+        os.path.join(tokenizer_path, "vocab.json"),
+        os.path.join(tokenizer_path, "merges.txt")
     )
     return tokenizer
