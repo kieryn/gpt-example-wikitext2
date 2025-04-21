@@ -11,6 +11,7 @@ from flax import linen as nn
 from datasets import load_dataset
 import yaml
 import numpy as np
+import time
 
 from model import TransformerDecoder
 from tokenizer import load_tokenizer
@@ -27,6 +28,28 @@ def create_train_state(rng, config):
     params = model.init(rng, jnp.ones((1, config["max_seq_length"]), dtype=jnp.int32))["params"]
     tx = optax.adamw(config["learning_rate"])
     return train_state.TrainState.create(apply_fn=model.apply, params=params, tx=tx)
+
+@jax.jit
+def train_step(state, batch, dropout_rng):
+    """Performs a single training step and returns the updated state and loss."""
+    def loss_fn(params):
+        inputs = batch['input_ids'][:, :-1]
+        targets = batch['labels'][:, 1:]
+        logits = state.apply_fn({'params': params}, inputs, train=True, rngs={'dropout': dropout_rng})
+        loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
+        return loss
+    loss, grads = jax.value_and_grad(loss_fn)(state.params)
+    new_state = state.apply_gradients(grads=grads)
+    return new_state, loss
+
+@jax.jit
+def eval_step(state, batch):
+    """Computes loss on a batch without updating parameters."""
+    inputs = batch['input_ids'][:, :-1]
+    targets = batch['labels'][:, 1:]
+    logits = state.apply_fn({'params': state.params}, inputs, train=False)
+    loss = optax.softmax_cross_entropy_with_integer_labels(logits, targets).mean()
+    return loss
 
 def prepare_datasets(tokenizer, config):
     """Load raw text splits, tokenize, and group into fixed-length sequences."""
@@ -83,13 +106,42 @@ def train(config_path):
     train_loader = data_loader(train_ds, config["batch_size"], shuffle=True)
     val_loader = data_loader(val_ds, config["batch_size"], shuffle=False)
 
-    rng = jax.random.PRNGKey(0)
+    # Initialize model state
+    rng = jax.random.PRNGKey(config.get("seed", 0))
     state = create_train_state(rng, config)
 
-    # Quick check: fetch one batch
-    batch = next(train_loader)
-    print(f"Loaded a batch of input_ids shape {batch['input_ids'].shape}")
-    # TODO: implement the full training loop using state, batches, and checkpoints
+    # Training loop
+    dropout_rng = jax.random.PRNGKey(config.get("seed", 1))
+    batch_size = config["batch_size"]
+    steps_per_epoch = len(train_ds["input_ids"]) // batch_size
+    num_epochs = config.get("num_epochs", 1)
+    for epoch in range(1, num_epochs + 1):
+        epoch_loss = 0.0
+        t0 = time.time()
+        for step in range(steps_per_epoch):
+            batch = next(train_loader)
+            dropout_rng, subkey = jax.random.split(dropout_rng)
+            state, loss = train_step(state, batch, subkey)
+            epoch_loss += loss
+            if (step + 1) % config.get("log_every", 100) == 0 or (step + 1) == steps_per_epoch:
+                print(f"Epoch {epoch} step {step+1}/{steps_per_epoch} loss {loss:.4f}")
+        epoch_loss /= steps_per_epoch
+        t1 = time.time()
+        print(f"Epoch {epoch} completed in {t1 - t0:.2f}s, avg loss {epoch_loss:.4f}")
+
+        # Validation
+        if val_ds is not None:
+            val_loss = 0.0
+            val_steps = len(val_ds["input_ids"]) // batch_size
+            for _ in range(val_steps):
+                batch = next(val_loader)
+                val_loss += eval_step(state, batch)
+            val_loss /= val_steps
+            print(f"Validation loss: {val_loss:.4f}")
+
+        # Save checkpoint
+        checkpoints.save_checkpoint(ckpt_dir="logs", target=state.params, step=epoch, overwrite=True)
+    print("Training complete.")
 
 if __name__ == "__main__":
     import argparse
