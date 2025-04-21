@@ -2,6 +2,15 @@
 Interactive text generation with the trained Transformer model.
 """
 import os
+import sys
+import argparse
+# Early parse to set CPU/GPU before JAX imports
+_early_parser = argparse.ArgumentParser(add_help=False)
+_early_parser.add_argument("--no_gpu", action="store_true")
+_early_args, _ = _early_parser.parse_known_args()
+if _early_args.no_gpu:
+    # Force JAX to use CPU backend
+    os.environ["JAX_PLATFORM_NAME"] = "cpu"
 import yaml
 import jax
 import jax.numpy as jnp
@@ -68,7 +77,22 @@ def main():
 
     # Restore trained parameters
     ckpt_dir = os.path.abspath(args.checkpoint_dir)
-    params = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=None)
+    # Initialize model variables to get parameter structure for restore
+    model = TransformerDecoder(
+        vocab_size=config["vocab_size"],
+        d_model=config["d_model"],
+        num_heads=config["num_heads"],
+        num_layers=config["num_layers"],
+        max_seq_length=config["max_seq_length"],
+        dropout_rate=config.get("dropout_rate", 0.1)
+    )
+    # Create dummy input for init
+    rng = jax.random.PRNGKey(config.get("seed", 0))
+    dummy_input = jnp.ones((1, config["max_seq_length"]), dtype=jnp.int32)
+    variables = model.init(rng, dummy_input)
+    init_params = variables.get("params")
+    # Restore checkpoint into parameters
+    params = checkpoints.restore_checkpoint(ckpt_dir=ckpt_dir, target=init_params)
 
     # Interactive prompt loop
     print("Enter prompt (empty to exit):")
