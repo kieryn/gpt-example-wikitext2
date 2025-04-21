@@ -18,6 +18,24 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
    pip install --upgrade "jax[cuda12_local]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
    pip install -r requirements.txt
    ```
+   
+  **Note for WSL2 GPU users**: Ensure you have both the NVIDIA CUDA toolkit and cuDNN libraries installed inside WSL2. For example:
+  ```bash
+  sudo apt update
+  sudo apt install -y nvidia-cuda-toolkit libcudnn8 libcudnn8-dev
+  ```
+  Then add the driver library path to the loader:
+  ```bash
+  echo "/usr/lib/wsl/lib" | sudo tee /etc/ld.so.conf.d/nvidia.conf
+  sudo ldconfig
+  ```
+  Verify with:
+  ```bash
+  python - << 'EOF'
+  import jax; import jax.numpy as jnp
+  print("Devices:", jax.devices())
+  EOF
+  ```
 
 3. Download the WikiText-2 data:
 
