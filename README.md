@@ -49,20 +49,20 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
 
 3. Download the WikiText-2 data:
 
-   ```
+```
    python data/download_wikitext2.py
-   ```
+```
 
 4. Train the model:
 
-   ```bash
+```bash
   python src/train.py --config configs/config.yaml
-   ```
+```
 
    For a larger/future chat-style model, try the advanced config:
-   ```bash
+```bash
   python src/train.py --config configs/config_advanced.yaml
-   ```
+```
 
 ## Directory Structure
 
@@ -90,8 +90,13 @@ After training, you can generate text interactively:
 
 ```bash
 source .venv/bin/activate
-# (optional) force CPU for generation
-JAX_PLATFORM_NAME=cpu python src/generate.py --config configs/config.yaml --length 20
+# Generate with optional sampling parameters:
+JAX_PLATFORM_NAME=cpu python src/generate.py \
+    --config configs/config.yaml \
+    --length 20 \
+    --temperature 0.8 \
+    --top_k 50 \
+    --top_p 0.9
 ```
 
 At the prompt, enter a starting text (empty input to exit) and the model will produce the next tokens.
