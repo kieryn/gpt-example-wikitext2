@@ -55,8 +55,13 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
 
 4. Train the model:
 
+   ```bash
+  python src/train.py --config configs/config.yaml
    ```
-   python src/train.py --config configs/config.yaml
+
+   For a larger/future chat-style model, try the advanced config:
+   ```bash
+  python src/train.py --config configs/config_advanced.yaml
    ```
 
 ## Directory Structure
@@ -67,7 +72,9 @@ This project trains a Transformer decoder-only language model on WikiText-2 usin
 ├── data/                   # Scripts and processed data
 │   └── download_wikitext2.py
 ├── configs/                # Configuration files
-│   └── config.yaml
+│   ├── config.yaml         # default training
+│   ├── config_smoke.yaml   # smoke-test config
+│   └── config_advanced.yaml# larger model config
 ├── logs/                   # Monitoring & checkpoint logs
 ├── requirements.txt        # Python dependencies
 └── src/                    # Source code
